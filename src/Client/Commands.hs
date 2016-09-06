@@ -132,10 +132,15 @@ executeUserCommand discoTime command st = do
       rest = dropWhile (==' ') . dropWhile (/=' ') $ command
 
   case views (clientConfig . configMacros) (recognize key) st of
-    Exact (Macro (MacroSpec spec) cmdExs) ->
-      case parseArguments spec rest *> traverse resolveMacro cmdExs of
+    Exact (FreeformMacro cmdExs) ->
+      case traverse resolveMacro cmdExs of
         Nothing   -> commandFailureMsg "Macro expansions failed" st
         Just cmds -> process cmds st
+    Exact (SpecMacro spec cmds) ->
+      case parseArguments spec rest of
+        Nothing -> commandFailure st
+        Just args -> let env = mkMacroEnv discoTime st args in
+          process (($env) <$> cmds) st
     _ ->  executeCommand Nothing command st
   where
     resolveMacro = resolveMacroExpansions (commandExpansion discoTime st) expandInt
@@ -152,6 +157,22 @@ executeUserCommand discoTime command st = do
            CommandSuccess st1 -> process cs st1
            CommandFailure st1 -> process cs st1 -- ?
            CommandQuit st1    -> return (CommandQuit st1)
+
+-- Makes the environment for calling a macro from the client state and other
+-- information.
+mkMacroEnv
+ :: Maybe Text  -- ^ disconnectTime
+ -> ClientState -- ^ client state
+ -> a           -- ^ arguments
+ -> MacroEnv a
+mkMacroEnv discoTime st args =
+  MacroEnv
+    { network    = commandExpansion discoTime st "network"
+    , channel    = commandExpansion discoTime st "channel"
+    , nick       = commandExpansion discoTime st "nick"
+    , disconnect = discoTime
+    , arguments  = args
+    }
 
 -- | Compute the replacement value for the given expansion variable.
 commandExpansion ::

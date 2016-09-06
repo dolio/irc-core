@@ -40,7 +40,7 @@ textboxImage st
   = (pos, croppedImage)
   where
   width = view clientWidth st
-  macros = views (clientConfig . configMacros) (fmap macroSpec) st
+  macros = view (clientConfig . configMacros) st
   (txt, content) =
      views (clientTextBox . Edit.content) (renderContent macros pal) st
 
@@ -64,7 +64,7 @@ textboxImage st
 -- corresponding to the rendered image which can be used for computing
 -- the logical cursor position of the cropped version of the text box.
 renderContent ::
-  Recognizer MacroSpec {- ^ macro completions                     -} ->
+  Recognizer Macro {- ^ macros                               -} ->
   Palette         {- ^ palette                               -} ->
   Edit.Content    {- ^ content                               -} ->
   (String, Image) {- ^ plain text rendering, image rendering -}
@@ -106,7 +106,7 @@ renderOtherLine = parseIrcTextExplicit . Text.pack
 
 -- | Render the active text box line using command highlighting and
 -- placeholders, and WYSIWYG mIRC formatting control characters.
-renderLine :: Recognizer MacroSpec -> Palette -> String -> Image
+renderLine :: Recognizer Macro -> Palette -> String -> Image
 renderLine macros pal ('/':xs)
   = char defAttr '/' <|> string attr cmd <|> continue rest
  where
@@ -123,9 +123,13 @@ renderLine macros pal ('/':xs)
          ( specAttr spec
          , argumentsImage pal spec
          )
-       Exact (Left (MacroSpec spec)) ->
+       Exact (Left (SpecMacro spec _)) ->
          ( specAttr spec
          , argumentsImage pal spec
+         )
+       Exact (Left (FreeformMacro _)) ->
+         ( view palCommand pal
+         , renderOtherLine
          )
        Prefix _ ->
          ( view palCommandPrefix pal
